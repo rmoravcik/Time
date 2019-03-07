@@ -139,6 +139,33 @@ void breakTime(time_t time, tmElements_t &tm);  // break time_t into elements
 time_t makeTime(const tmElements_t &tm);  // convert time elements into time_t
 
 } // extern "C++"
+
+#if defined(__AVR_ATmega3208__) || defined(__AVR_ATmega3209__) || defined(__AVR_ATmega4808__) || defined(__AVR_ATmega4809__)
+class RealTimeCounter {
+  public:
+	/* constructor than initialize one second interrupt with RTC registers*/
+	RealTimeCounter();
+	
+	/* interrupts functions */
+	void attachInterrupt(void (*isr)()) __attribute__((always_inline)) {
+		
+		isrCallback = isr;
+		
+	}
+	
+	void detachInterrupt() __attribute__((always_inline)) {
+	
+		isrCallback = RealTimeCounter::isrDefaultUnused;					
+	
+	}
+
+	static void (*isrCallback)();
+	static void isrDefaultUnused();	
+};
+
+/*  tweak to run interrupt before sketch using the class constructor */
+extern RealTimeCounter InternalRTC;
+#endif
+
 #endif // __cplusplus
 #endif /* _Time_h */
-
