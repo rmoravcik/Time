@@ -1,0 +1,53 @@
+
+#include <TimeLib.h>
+
+bool secondFire = false; // 1 second fire flag
+
+
+void setup() {
+
+  InternalRTC.attachInterrupt(rtc_irq); // set interrupt user function fired by internal RTC clock of MEGAAVR serie
+                                        // run only on ATmega3208, ATmega4808, ATmega3209 and ATmega4809 ATMEL AVR
+  
+  setTime(00,00,00,24,04,1981);         // set the current system timestamp from arbitrary date/time
+
+  Serial.begin(9600);                   // init serial
+  pinMode(LED_BUILTIN, OUTPUT);         // init built-in led
+  
+}
+
+void rtc_irq() { // executed all seconds
+     
+  secondFire = true; // fire flag
+ 
+}
+
+void loop() {
+
+  if( secondFire ) { // make actions if flag is fired:
+
+    secondFire = false; // unfire flag
+  
+    unsigned long actualTime = now(); // get actual system timestamp
+
+    // display current system date and time:
+    Serial.print(year(actualTime));
+    Serial.print("-");
+    Serial.print(month(actualTime));
+    Serial.print("-");
+    Serial.print(day(actualTime));
+    Serial.print(" ");
+    Serial.print(hour(actualTime));
+    Serial.print(":");
+    Serial.print(minute(actualTime));
+    Serial.print(":");
+    Serial.println(second(actualTime));
+
+    // blink led:
+    digitalWrite(LED_BUILTIN, HIGH);
+    delay(250);
+    digitalWrite(LED_BUILTIN, LOW);
+
+  }
+
+}
