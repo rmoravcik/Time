@@ -39,6 +39,7 @@ static tmElements_t tm;          // a cache of time elements
 static time_t cacheTime;   // the time the cache was updated
 static uint32_t syncInterval = 300;  // time sync will be attempted after this many seconds
 
+
 void refreshCache(time_t t) {
   if (t != cacheTime) {
     breakTime(t, tm); 
@@ -235,9 +236,35 @@ time_t makeTime(const tmElements_t &tm){
 /* Low level system time functions  */
 
 static uint32_t sysTime = 0;
+#if !defined(__AVR_ATmega3208__) && !defined(__AVR_ATmega3209__) && !defined(__AVR_ATmega4808__) && !defined(__AVR_ATmega4809__)
 static uint32_t prevMillis = 0;
+#endif
 static uint32_t nextSyncTime = 0;
 static timeStatus_t Status = timeNotSet;
+
+RealTimeCounter InternalRTC; // preinstatiate
+
+void (*RealTimeCounter::isrCallback)() = RealTimeCounter::isrDefaultUnused;
+
+#if defined(__AVR_ATmega3208__) || defined(__AVR_ATmega3209__) || defined(__AVR_ATmega4808__) || defined(__AVR_ATmega4809__)
+// interrupt function called all 1 second
+ISR(RTC_PIT_vect) {
+
+    // clear flag by writing '1':
+    RTC.PITINTFLAGS = RTC_PI_bm;
+
+	// incrementing system time
+	sysTime++;
+    
+    // call interrupt user function if defined
+    InternalRTC.isrCallback();
+    
+}
+#endif
+
+void RealTimeCounter::isrDefaultUnused() {
+}
+
 
 getExternalTime getTimePtr;  // pointer to external sync function
 //setExternalTime setTimePtr; // not used in this version
@@ -248,15 +275,18 @@ time_t sysUnsyncedTime = 0; // the time sysTime unadjusted by sync
 
 
 time_t now() {
+#if !defined(__AVR_ATmega3208__) && !defined(__AVR_ATmega3209__) && !defined(__AVR_ATmega4808__) && !defined(__AVR_ATmega4809__)
 	// calculate number of seconds passed since last call to now()
   while (millis() - prevMillis >= 1000) {
 		// millis() and prevMillis are both unsigned ints thus the subtraction will always be the absolute value of the difference
     sysTime++;
     prevMillis += 1000;	
+
 #ifdef TIME_DRIFT_INFO
     sysUnsyncedTime++; // this can be compared to the synced time to measure long term drift     
 #endif
   }
+#endif
   if (nextSyncTime <= sysTime) {
     if (getTimePtr != 0) {
       time_t t = getTimePtr();
@@ -271,7 +301,7 @@ time_t now() {
   return (time_t)sysTime;
 }
 
-void setTime(time_t t) { 
+void setTime(time_t t) {
 #ifdef TIME_DRIFT_INFO
  if(sysUnsyncedTime == 0) 
    sysUnsyncedTime = t;   // store the time of the first call to set a valid Time   
@@ -280,7 +310,13 @@ void setTime(time_t t) {
   sysTime = (uint32_t)t;  
   nextSyncTime = (uint32_t)t + syncInterval;
   Status = timeSet;
+
+
+
+
+#if !defined(__AVR_ATmega3208__) && !defined(__AVR_ATmega3209__) && !defined(__AVR_ATmega4808__) && !defined(__AVR_ATmega4809__)
   prevMillis = millis();  // restart counting from now (thanks to Korman for this fix)
+#endif
 } 
 
 void setTime(int hr,int min,int sec,int dy, int mnth, int yr){
@@ -319,3 +355,65 @@ void setSyncInterval(time_t interval){ // set the number of seconds between re-s
   syncInterval = (uint32_t)interval;
   nextSyncTime = sysTime + syncInterval;
 }
+
+
+#if defined(__AVR_ATmega3208__) || defined(__AVR_ATmega3209__) || defined(__AVR_ATmega4808__) || defined(__AVR_ATmega4809__)
+
+
+
+/*  TimeHelper constructor for activate 1s interrupt with RTC registers */
+RealTimeCounter::RealTimeCounter() { 
+
+	uint8_t temp;
+	
+    /* Initialize 32.768kHz Oscillator: */
+    /* Disable oscillator: */
+    temp = CLKCTRL.XOSC32KCTRLA;
+    temp &= ~CLKCTRL_ENABLE_bm;
+    
+    /* Enable writing to protected register */
+    CPU_CCP = CCP_IOREG_gc;
+    CLKCTRL.XOSC32KCTRLA = temp;
+    
+    while(CLKCTRL.MCLKSTATUS & CLKCTRL_XOSC32KS_bm)
+    {
+        ; /* Wait until XOSC32KS becomes 0 */
+    }
+    
+    /* SEL = 0 (Use External Crystal): */
+    temp = CLKCTRL.XOSC32KCTRLA;
+    temp &= ~CLKCTRL_SEL_bm;
+    
+    /* Enable writing to protected register */
+    CPU_CCP = CCP_IOREG_gc;
+    CLKCTRL.XOSC32KCTRLA = temp;
+    
+    /* Enable oscillator: */
+    temp = CLKCTRL.XOSC32KCTRLA;
+    temp |= CLKCTRL_ENABLE_bm;
+    
+    /* Enable writing to protected register */
+    CPU_CCP = CCP_IOREG_gc;
+    CLKCTRL.XOSC32KCTRLA = temp;
+    
+    /* Initialize RTC: */
+    while (RTC.STATUS > 0)
+    {
+        ; /* Wait for all register to be synchronized */
+    }
+
+    /* 32.768kHz External Crystal Oscillator (XOSC32K) */
+    RTC.CLKSEL = RTC_CLKSEL_TOSC32K_gc;
+
+    /* Run in debug: enabled */
+    //RTC.DBGCTRL = RTC_DBGRUN_bm;
+
+    RTC.PITINTCTRL = RTC_PI_bm; /* Periodic Interrupt: enabled */
+    
+    RTC.PITCTRLA = RTC_PERIOD_CYC32768_gc /* RTC Clock Cycles 32768 */
+                 | RTC_PITEN_bm; /* Enable: enabled */
+
+}
+
+
+#endif
