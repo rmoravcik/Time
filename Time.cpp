@@ -242,11 +242,13 @@ static uint32_t prevMillis = 0;
 static uint32_t nextSyncTime = 0;
 static timeStatus_t Status = timeNotSet;
 
+// main interruption RTC function for megaavr architecture: 
+#if defined(__AVR_ATmega3208__) || defined(__AVR_ATmega3209__) || defined(__AVR_ATmega4808__) || defined(__AVR_ATmega4809__)
+
 RealTimeCounter InternalRTC; // preinstatiate
 
 void (*RealTimeCounter::isrCallback)() = RealTimeCounter::isrDefaultUnused;
 
-#if defined(__AVR_ATmega3208__) || defined(__AVR_ATmega3209__) || defined(__AVR_ATmega4808__) || defined(__AVR_ATmega4809__)
 // interrupt function called all 1 second
 ISR(RTC_PIT_vect) {
 
@@ -261,9 +263,6 @@ ISR(RTC_PIT_vect) {
     
 }
 #endif
-
-void RealTimeCounter::isrDefaultUnused() {
-}
 
 
 getExternalTime getTimePtr;  // pointer to external sync function
@@ -415,5 +414,5 @@ RealTimeCounter::RealTimeCounter() {
 
 }
 
-
+void RealTimeCounter::isrDefaultUnused() {}
 #endif
