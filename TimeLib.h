@@ -158,7 +158,7 @@ class RealTimeCounter {
 		isrCallback = RealTimeCounter::isrDefaultUnused;					
 	
 	}
-
+	
 	static void (*isrCallback)();
 	static void isrDefaultUnused();	
 };
