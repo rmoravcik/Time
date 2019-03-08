@@ -236,7 +236,9 @@ time_t makeTime(const tmElements_t &tm){
 /* Low level system time functions  */
 
 static uint32_t sysTime = 0;
-#if !defined(__AVR_ATmega3208__) && !defined(__AVR_ATmega3209__) && !defined(__AVR_ATmega4808__) && !defined(__AVR_ATmega4809__)
+#if defined(__AVR_ATmega3208__) || defined(__AVR_ATmega3209__) || defined(__AVR_ATmega4808__) || defined(__AVR_ATmega4809__)
+static uint16_t rtcPulses = 0;
+#else
 static uint32_t prevMillis = 0;
 #endif
 static uint32_t nextSyncTime = 0;
@@ -256,14 +258,18 @@ ISR(RTC_PIT_vect) {
     RTC.PITINTFLAGS = RTC_PI_bm;
 
 	// incrementing system time
-	sysTime++;
-    
-    // call interrupt user function if defined
-    InternalRTC.isrCallback();
-    
+	if(++rtcPulses == RTC_SYNC_PRECISION_HZ) {
+
+		rtcPulses = 0;
+		sysTime++;		
+
+		// call interrupt user function if defined
+		InternalRTC.isrCallback();
+	}
+    		
+		
 }
 #endif
-
 
 getExternalTime getTimePtr;  // pointer to external sync function
 //setExternalTime setTimePtr; // not used in this version
@@ -310,10 +316,9 @@ void setTime(time_t t) {
   nextSyncTime = (uint32_t)t + syncInterval;
   Status = timeSet;
 
-
-
-
-#if !defined(__AVR_ATmega3208__) && !defined(__AVR_ATmega3209__) && !defined(__AVR_ATmega4808__) && !defined(__AVR_ATmega4809__)
+#if defined(__AVR_ATmega3208__) || defined(__AVR_ATmega3209__) || defined(__AVR_ATmega4808__) || defined(__AVR_ATmega4809__)
+  rtcPulses = 0; //  restart counting (precision depend of value of RTC_SYNC_PRECISION_HZ)
+#else
   prevMillis = millis();  // restart counting from now (thanks to Korman for this fix)
 #endif
 } 
@@ -332,6 +337,7 @@ void setTime(int hr,int min,int sec,int dy, int mnth, int yr){
   tm.Minute = min;
   tm.Second = sec;
   setTime(makeTime(tm));
+  
 }
 
 void adjustTime(long adjustment) {
@@ -357,8 +363,6 @@ void setSyncInterval(time_t interval){ // set the number of seconds between re-s
 
 
 #if defined(__AVR_ATmega3208__) || defined(__AVR_ATmega3209__) || defined(__AVR_ATmega4808__) || defined(__AVR_ATmega4809__)
-
-
 
 /*  TimeHelper constructor for activate 1s interrupt with RTC registers */
 RealTimeCounter::RealTimeCounter() { 
@@ -409,7 +413,9 @@ RealTimeCounter::RealTimeCounter() {
 
     RTC.PITINTCTRL = RTC_PI_bm; /* Periodic Interrupt: enabled */
     
-    RTC.PITCTRLA = RTC_PERIOD_CYC32768_gc /* RTC Clock Cycles 32768 */
+    // make the register value of RTC_PERIOD_CYCXXXX_gc
+    // note : 0.69 is volontary 2 decimal only rounded log(2) constant (important)
+    RTC.PITCTRLA = uint8_t( ( log(32768/RTC_SYNC_PRECISION_HZ ) / 0.69 )  - 1 ) << 3 /* RTC Clock Cycles */
                  | RTC_PITEN_bm; /* Enable: enabled */
 
 }
