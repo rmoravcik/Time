@@ -8,6 +8,9 @@ to provide an API that is more flexible and easier to use.
 A primary goal was to enable date and time functionality that can be used with
 a variety of external time sources with minimum differences required in sketch logic.
 
+Use Internal RTC circuit of ATMEL AVR megaavr 0 series (3208, 3209, 4808, 4809) for clocking (if detected).
+On this architecture, it was possible to attach/detach a user interruption called one time by second.
+
 Example sketches illustrate how similar sketch code can be used with: a Real Time Clock,
 internet NTP time service, GPS time data, and Serial time messages from a computer
 for time synchronization.
@@ -66,6 +69,13 @@ timeNeedsSync                    // the time had been set but a sync attempt did
 timeSet                          // the time is set and is synced
 ```
 
+Specifics clocking features for internal RTC embbeded with ATMEL AVR megaavr 0 series (3208, 3209, 4808, 4809)
+
+```c
+InternalRTC.attachInterrupt(userIrqFunction); // attach a rtc user function called one time by second (1Hz)
+InternalRTC.detachInterrupt();                // detach the rtc user function
+```
+
 Time and Date values are not valid if the status is timeNotSet. Otherwise, values can be used but
 the returned time may have drifted if the status is timeNeedsSync. 	
 
@@ -78,6 +88,7 @@ There are many convenience macros in the `time.h` file for time constants and co
 of time units.
 
 To use the library, copy the download to the Library directory.
+
 
 ## Examples
 
