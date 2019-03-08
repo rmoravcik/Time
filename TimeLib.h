@@ -71,6 +71,7 @@ typedef time_t(*getExternalTime)();
 #define SECS_PER_WEEK ((time_t)(SECS_PER_DAY * DAYS_PER_WEEK))
 #define SECS_PER_YEAR ((time_t)(SECS_PER_DAY * 365UL)) // TODO: ought to handle leap years
 #define SECS_YR_2000  ((time_t)(946684800UL)) // the time at the start of y2k
+#define RTC_SYNC_PRECISION_HZ 4096 // top start RTC frequency precision
  
 /* Useful Macros for getting elapsed time */
 #define numberOfSeconds(_time_) ((_time_) % SECS_PER_MIN)  
@@ -145,6 +146,8 @@ class RealTimeCounter {
   public:
 	/* constructor than initialize one second interrupt with RTC registers*/
 	RealTimeCounter();
+	
+	//static void RealTimeCounter();
 	
 	/* interrupts functions */
 	void attachInterrupt(void (*isr)()) __attribute__((always_inline)) {
