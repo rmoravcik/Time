@@ -80,7 +80,8 @@ InternalRTC.getFreqPrecision();                    // get the current internal R
 note: freq and intFreq are power of 2 numbers in hertz between 1 and 8192 (or 0 to disable).
 
 The RTC second start at the same moment of setTime call, with a precision of 1/intFreq second (set with setFreqPrecision())
-Becarful: high frequency precision make high CPU load!
+
+*Be careful: high frequency precision make high CPU load!*
 
 
 Time and Date values are not valid if the status is timeNotSet. Otherwise, values can be used but
