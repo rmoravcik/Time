@@ -74,10 +74,14 @@ Specifics clocking features for internal RTC embbeded with ATMEL AVR megaavr 0 s
 ```c
 InternalRTC.attachInterrupt(userIrqFunction,freq); // attach a IRQ user function called at the RTC freq frequency
 InternalRTC.detachInterrupt();                     // detach the ÌRQ user function
-InternalRTC.setFreqPrecision(freq);                // set internal RTC IRQ freq frequency (precision of start of second)
+InternalRTC.setFreqPrecision(intFreq);             // set internal RTC IRQ intFreq frequency (precision of start of second)
 InternalRTC.getFreqPrecision();                    // get the current internal RTC IRQ frequency
 ```
-note: freq is a power of 2 number in hertz between 1 and 8192 (or 0 to disable RTC IRQ).
+note: freq and intFreq are power of 2 numbers in hertz between 1 and 8192 (or 0 to disable).
+
+The RTC second start at the same moment of setTime call, with a precision of 1/intFreq second (set with setFreqPrecision())
+
+
 
 Time and Date values are not valid if the status is timeNotSet. Otherwise, values can be used but
 the returned time may have drifted if the status is timeNeedsSync. 	
