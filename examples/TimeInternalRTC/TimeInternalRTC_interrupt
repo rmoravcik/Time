@@ -6,13 +6,21 @@ bool secondFire = false; // 1 second fire flag
 
 void setup() {
 
-  InternalRTC.attachInterrupt(rtc_irq); // set interrupt user function fired by internal RTC clock of MEGAAVR serie
-                                        // run only on ATmega3208, ATmega4808, ATmega3209 and ATmega4809 ATMEL AVR
+  InternalRTC.attachInterrupt(rtc_irq, 1); // set user IRQ function fired by internal RTC clock 
+                                           // (1Hz by defaut, max 8192Hz, only power of 2 number)
+                                           // run only on megaAVR-0 series!
+                                           // note : use InternalRTC.detachInterrupt() for detach IRQ function
+                                           
+  InternalRTC.setFreqPrecision(16);        // set the frequency of internal rtc cycles : 16Hz : 1/16 = 0.0625s
+                                           // (1Hz by defaut, max 8192Hz, only power of 2 number)
+                                           // run only on megaAVR-0 series!
+                                           // note : use InternalRTC.getFreqPrecision() for get actual frequency
   
-  setTime(00,00,00,24,04,1981);         // set the current system timestamp from arbitrary date/time
+  setTime(8,15,00,24,04,1981);             // set the current system timestamp from arbitrary date/time
+                                           // now... at +/- 0.0625s (depend of setFreqPrecision)
 
-  Serial.begin(9600);                   // init serial
-  pinMode(LED_BUILTIN, OUTPUT);         // init built-in led
+  Serial.begin(9600);                      // init serial
+  pinMode(LED_BUILTIN, OUTPUT);            // init built-in led
   
 }
 
@@ -27,7 +35,7 @@ void loop() {
   if( secondFire ) { // make actions if flag is fired:
 
     secondFire = false; // unfire flag
-  
+
     unsigned long actualTime = now(); // get actual system timestamp
 
     // display current system date and time:
@@ -45,7 +53,7 @@ void loop() {
 
     // blink led:
     digitalWrite(LED_BUILTIN, HIGH);
-    delay(250);
+    delay(50);
     digitalWrite(LED_BUILTIN, LOW);
 
   }
