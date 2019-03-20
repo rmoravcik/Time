@@ -6,6 +6,7 @@
 # Datatypes (KEYWORD1)
 #######################################
 time_t	KEYWORD1
+InternalRTC KEYWORD1
 #######################################
 # Methods and Functions (KEYWORD2)
 #######################################
