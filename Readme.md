@@ -69,21 +69,6 @@ timeNeedsSync                    // the time had been set but a sync attempt did
 timeSet                          // the time is set and is synced
 ```
 
-Specifics clocking features for internal RTC embbeded with ATMEL AVR megaavr 0 series (3208, 3209, 4808, 4809)
-
-```c
-InternalRTC.attachInterrupt(userIrqFunction,freq); // attach a IRQ user function called at the RTC freq frequency
-InternalRTC.detachInterrupt();                     // detach the ÌRQ user function
-InternalRTC.setFreqPrecision(intFreq);             // set internal RTC IRQ intFreq frequency (precision of start of second)
-InternalRTC.getFreqPrecision();                    // get the current internal RTC IRQ frequency
-```
-note: freq and intFreq are power of 2 numbers in hertz between 1 and 8192 (or 0 to disable).
-
-The RTC second start at the same moment of setTime call, with a precision of 1/intFreq second (set with setFreqPrecision())
-
-*Be careful: high frequency precision make high CPU load!*
-
-
 Time and Date values are not valid if the status is timeNotSet. Otherwise, values can be used but
 the returned time may have drifted if the status is timeNeedsSync. 	
 
@@ -97,6 +82,24 @@ of time units.
 
 To use the library, copy the download to the Library directory.
 
+## MegaAvr 0 series Case
+For Arduino Uno WiFi rev 2 and other board with ATMEL AVR megaavr 0 series (3208, 3209, 4808, 4809).
+
+The internal embbeded RTC is used for real clock in board (not based on millis() function).
+
+Specifics clocking features exists for this architecture:
+
+```c
+InternalRTC.attachInterrupt(userIrqFunction,freq); // attach a IRQ user function called at the RTC freq frequency
+InternalRTC.detachInterrupt();                     // detach the ÌRQ user function
+InternalRTC.setFreqPrecision(intFreq);             // set internal RTC IRQ intFreq frequency (precision of start of second)
+InternalRTC.getFreqPrecision();                    // get the current internal RTC IRQ frequency
+```
+note: freq and intFreq are power of 2 numbers in hertz between 1 and 8192 (or 0 to disable).
+
+The RTC second start at the same moment of setTime call, with a precision of 1/intFreq second (set with setFreqPrecision())
+
+*Be careful: high frequency precision make high CPU load!*
 
 ## Examples
 
