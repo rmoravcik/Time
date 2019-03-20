@@ -1,4 +1,3 @@
-
 /*
 Example of code running in same conditions with ATMEGA and MEGAAVR 0 series indifferently
 
@@ -12,7 +11,7 @@ unsigned long oldTime;
 
 void setup() {
 
-  setTime(00,00,00,24,04,1981);         // set the current system timestamp from arbitrary date/time
+  setTime(8,15,00,24,04,1981);          // set the current system timestamp from arbitrary date/time
 
   Serial.begin(9600);                   // init serial
   pinMode(LED_BUILTIN, OUTPUT);         // init built-in led
