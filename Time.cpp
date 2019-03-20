@@ -251,22 +251,36 @@ RealTimeCounter InternalRTC; // preinstatiate
 
 void (*RealTimeCounter::isrCallback)() = RealTimeCounter::isrDefaultUnused;
 
-// interrupt function called all 1 second
+// system RTC interrupt function called at InternalRTC.sysIrqFreq Hz
 ISR(RTC_PIT_vect) {
 
-    // clear flag by writing '1':
-    RTC.PITINTFLAGS = RTC_PI_bm;
+	// clear flag by writing '1'
+	RTC.PITINTFLAGS = RTC_PI_bm;
 
-	// incrementing system time
-	if(++rtcPulses == RTC_SYNC_PRECISION_HZ) {
+	// update the RTC IRQ registers if required
+	if( InternalRTC.sysIrqChangeFlag ) {
+	
+	RTC.PITCTRLA = InternalRTC.sysIrqPeriodCycles // set the system IRQ frequency
+		| RTC_PITEN_bm; // Enable: enabled
+
+		InternalRTC.sysIrqChangeFlag = false; // release change flag
+      
+	}
+
+	// fire user IRQ only at the good frequency
+	if( InternalRTC.userIrqFreq != 0 && rtcPulses % (InternalRTC.sysIrqFreq / InternalRTC.userIrqFreq) == 0 ) {
+
+		InternalRTC.isrCallback(); // call interrupt user function if defined
+
+	}
+
+	// incrementing system time when the current second is elapsed
+	if( ++rtcPulses == InternalRTC.sysIrqFreq ) {
 
 		rtcPulses = 0;
 		sysTime++;		
 
-		// call interrupt user function if defined
-		InternalRTC.isrCallback();
-	}
-    		
+	}   	
 		
 }
 #endif
@@ -317,7 +331,7 @@ void setTime(time_t t) {
   Status = timeSet;
 
 #if defined(__AVR_ATmega3208__) || defined(__AVR_ATmega3209__) || defined(__AVR_ATmega4808__) || defined(__AVR_ATmega4809__)
-  rtcPulses = 0; //  restart counting (precision depend of value of RTC_SYNC_PRECISION_HZ)
+  rtcPulses = 0; //  restart counting
 #else
   prevMillis = millis();  // restart counting from now (thanks to Korman for this fix)
 #endif
@@ -413,10 +427,8 @@ RealTimeCounter::RealTimeCounter() {
 
     RTC.PITINTCTRL = RTC_PI_bm; /* Periodic Interrupt: enabled */
     
-    // make the register value of RTC_PERIOD_CYCXXXX_gc
-    // note : 0.69 is volontary 2 decimal only rounded log(2) constant (important)
-    RTC.PITCTRLA = uint8_t( ( log(32768/RTC_SYNC_PRECISION_HZ ) / 0.69 )  - 1 ) << 3 /* RTC Clock Cycles */
-                 | RTC_PITEN_bm; /* Enable: enabled */
+	RTC.PITCTRLA = RTC_PERIOD_CYC4096_gc| RTC_PITEN_bm; /* set 1 Hz rtc irq at startup */
+
 
 }
 
