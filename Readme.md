@@ -91,12 +91,12 @@ Specifics features exists for this architecture:
 
 ```c
 InternalRTC.attachInterrupt(userIrqFunction,freq); // attach a IRQ user function called at the freq frequency
-InternalRTC.detachInterrupt();                     // detach the ÌRQ user function
+InternalRTC.detachInterrupt();                     // detach the IRQ user function
 // notes: freq are power of 2 numbers in hertz between 1 and 8192 (or 0 to disable).
 // this interrupt is synchronized by RTC but is NOT in phase with each new second of RTC clock
 
 InternalRTC.attachClockInterrupt(userIrqFunction); // attach a IRQ user function called each new second
-InternalRTC.detachClockInterrupt();                // detach the ÌRQ user function
+InternalRTC.detachClockInterrupt();                // detach the IRQ user function
 // note : The RTC second start at the *exact* moment of setTime() function call.
 // this interrupt is synchronized exactly with each new second of RTC clock
 ```
