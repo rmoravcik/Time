@@ -9,7 +9,7 @@ A primary goal was to enable date and time functionality that can be used with
 a variety of external time sources with minimum differences required in sketch logic.
 
 Use Internal RTC circuit of ATMEL AVR megaavr 0 series (3208, 3209, 4808, 4809) for clocking (if detected).
-On this architecture, it was possible to attach/detach a user interruption called one time by second.
+On this architecture, it was possible to attach/detach specifics users interruptions based on internal RTC.
 
 Example sketches illustrate how similar sketch code can be used with: a Real Time Clock,
 internet NTP time service, GPS time data, and Serial time messages from a computer
