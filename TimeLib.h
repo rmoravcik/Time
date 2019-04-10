@@ -12,7 +12,6 @@
 #define _Time_h
 
 #include <inttypes.h>
-
 #ifndef __AVR__
 #include <sys/types.h> // for __time_t_defined, but avr libc lacks sys/types.h
 #endif
@@ -20,6 +19,7 @@
 #if !defined(__time_t_defined) // avoid conflict with newlib or other posix libc
 typedef unsigned long time_t;
 #endif
+
 
 
 // This ugly hack allows us to define C++ overloaded functions, when included
@@ -87,12 +87,16 @@ typedef time_t(*getExternalTime)();
 #define previousSunday(_time_) ((_time_) - elapsedSecsThisWeek(_time_))      // time at the start of the week for the given time
 #define nextSunday(_time_) (previousSunday(_time_)+SECS_PER_WEEK)          // time at the end of the week for the given time
 
-
 /* Useful Macros for converting elapsed time to a time_t */
 #define minutesToTime_t ((M)) ( (M) * SECS_PER_MIN)  
 #define hoursToTime_t   ((H)) ( (H) * SECS_PER_HOUR)  
 #define daysToTime_t    ((D)) ( (D) * SECS_PER_DAY) // fixed on Jul 22 2011
 #define weeksToTime_t   ((W)) ( (W) * SECS_PER_WEEK)   
+
+/* Useful RTC constants */
+#define RTC_CYCLES_PERIOD 32767  // one second in quartz cycles - 1  (zero is included)
+#define RTC_LATE_OR_ADVANCE_LIMIT_MS (1000/2)  // half-second in ms
+#define RTC_CNT_OVERFLOW_WHILE_SET_TIME_CALLED_MAX_MS 100  // max time in order to detect the following condition : RTC.CNT overflow while setTime() is called
 
 /*============================================================================*/
 /*  time and date functions   */
@@ -144,86 +148,82 @@ time_t makeTime(const tmElements_t &tm);  // convert time elements into time_t
 class RealTimeCounter {
   public:
 
-  	bool sysIrqChangeFlag = true;
-	uint16_t sysIrqFreq = 1;
-	uint16_t userIrqFreq = 0;
-	uint16_t sysIrqPeriodCycles = RTC_PERIOD_CYC32768_gc; // 1 Hz by default
+  	bool RtcPitChangeFlag = true;
+	uint16_t RtcPitFreq = 0;
+	uint16_t RtcPitPeriodCycles = RTC_PERIOD_OFF_gc; // off by default
 
 	/* constructor than initialize one user interrupt with IRQ RTC registers*/
 	RealTimeCounter();
+
+	/* interrupts functions */
+	void attachClockInterrupt(void (*isr)()) __attribute__((always_inline)) {
+		
+		// attach interupt
+		isrRtcCallback = isr;
+		
+	}
+	
+	void detachClockInterrupt() __attribute__((always_inline)) {
+	
+		// detach user IRQ function
+		isrRtcCallback = RealTimeCounter::isrDefaultUnused;
+	
+	}
 	
 	/* interrupts functions */
 	void attachInterrupt(void (*isr)(), uint16_t freq = 1) __attribute__((always_inline)) {
 		
-		// update the RTC if the userIRQ freq requested is below his freq or equal 0 (stop system IRQ)
-		if( freq > sysIrqFreq || freq == 0 ) {
-			setFreqPrecision(freq);
+		if(freq == 0 || freq > 8192) { // reset variables to disable IRQ if out of range
+			
+			// reset frequency and period cycles varaibles
+			RtcPitFreq = 0;
+			RtcPitPeriodCycles = RTC_PERIOD_OFF_gc;
+			
+			// fire change flag (executed a the next IRQ call)
+			RtcPitChangeFlag = true;
+			
+		} else {
+
+			// round to the hightest power of 2 by bit shiftings
+			RtcPitFreq = 1 << (16 - __builtin_clz( freq - 1 ));
+	
+			// retrieve the value of RTC_PERIOD_CYCXXXXX_gc from the frequency by calculation according the following table :
+			/* RtcPitPeriodCycles = */  //RTC_PERIOD_OFF_gc = (0x00<<3),  /* Off */
+			/* RtcPitPeriodCycles = */  //RTC_PERIOD_CYC4_gc = (0x01<<3),  /* 8192 Hz */
+			/* RtcPitPeriodCycles = */  //RTC_PERIOD_CYC8_gc = (0x02<<3),  /* 4096 Hz */
+			/* RtcPitPeriodCycles = */  //RTC_PERIOD_CYC16_gc = (0x03<<3),  /* 2048 Hz */
+			/* RtcPitPeriodCycles = */  //RTC_PERIOD_CYC32_gc = (0x04<<3),  /* 1024 Hz */
+			/* RtcPitPeriodCycles = */  //RTC_PERIOD_CYC64_gc = (0x05<<3),  /* 512 Hz */
+			/* RtcPitPeriodCycles = */  //RTC_PERIOD_CYC128_gc = (0x06<<3),  /* 256 Hz */
+			/* RtcPitPeriodCycles = */  //RTC_PERIOD_CYC256_gc = (0x07<<3),  /* 128 Hz */
+			/* RtcPitPeriodCycles = */  //RTC_PERIOD_CYC512_gc = (0x08<<3),  /* 64 Hz */
+			/* RtcPitPeriodCycles = */  //RTC_PERIOD_CYC1024_gc = (0x09<<3),  /* 32 Hz */
+			/* RtcPitPeriodCycles = */  //RTC_PERIOD_CYC2048_gc = (0x0A<<3),  /* 16 Hz */
+			/* RtcPitPeriodCycles = */  //RTC_PERIOD_CYC4096_gc = (0x0B<<3),  /* 8 Hz */
+			/* RtcPitPeriodCycles = */  //RTC_PERIOD_CYC8192_gc = (0x0C<<3),  /* 4 Hz */
+			/* RtcPitPeriodCycles = */  //RTC_PERIOD_CYC16384_gc = (0x0D<<3),  /* 2 Hz */
+			/* RtcPitPeriodCycles = */  //RTC_PERIOD_CYC32768_gc = (0x0E<<3),  /* 1 Hz */
+			RtcPitPeriodCycles = ( __builtin_clz( RtcPitFreq ) - 1 ) << 3; // (by optimized method finding the numbers of zeros of RTC IRQ freq in binary to retrieve the power of 2)
+
+			// fire change flag (executed a the next IRQ call)
+			RtcPitChangeFlag = true;
+			
 		}
-		
-		// round to the hightest power of 2 by bit shiftings
-		userIrqFreq = 1 << (16 - __builtin_clz( freq - 1 ));
-		
+
 		// attach interupt
-		isrCallback = isr;
+		isrPitCallback = isr;
 		
 	}
 	
 	void detachInterrupt() __attribute__((always_inline)) {
 	
 		// detach user IRQ function
-		isrCallback = RealTimeCounter::isrDefaultUnused;
+		isrPitCallback = RealTimeCounter::isrDefaultUnused;
 	
 	}
 	
-	void setFreqPrecision(uint16_t freq) __attribute__((always_inline)) {
-
-		if(freq == 0 || freq > 8192) { // reset variables to disable IRQ if out of range
-			
-			// reset frequency and period cycles varaibles
-			sysIrqFreq = 0;
-			sysIrqPeriodCycles = RTC_PERIOD_OFF_gc;
-			
-			// fire change flag (executed a the next IRQ call)
-			sysIrqChangeFlag = true;
-			
-		} else if( freq > userIrqFreq  ) { // prevent case where IRQ freq is below the userIRQ freq required
-
-			// round to the hightest power of 2 by bit shiftings
-			sysIrqFreq = 1 << (16 - __builtin_clz( freq - 1 ));
-	
-			// retrieve the value of RTC_PERIOD_CYCXXXXX_gc from the frequency by calculation according the following table :
-			/* sysIrqPeriodCycles = */  //RTC_PERIOD_OFF_gc = (0x00<<3),  /* Off */
-			/* sysIrqPeriodCycles = */  //RTC_PERIOD_CYC4_gc = (0x01<<3),  /* 8192 Hz */
-			/* sysIrqPeriodCycles = */  //RTC_PERIOD_CYC8_gc = (0x02<<3),  /* 4096 Hz */
-			/* sysIrqPeriodCycles = */  //RTC_PERIOD_CYC16_gc = (0x03<<3),  /* 2048 Hz */
-			/* sysIrqPeriodCycles = */  //RTC_PERIOD_CYC32_gc = (0x04<<3),  /* 1024 Hz */
-			/* sysIrqPeriodCycles = */  //RTC_PERIOD_CYC64_gc = (0x05<<3),  /* 512 Hz */
-			/* sysIrqPeriodCycles = */  //RTC_PERIOD_CYC128_gc = (0x06<<3),  /* 256 Hz */
-			/* sysIrqPeriodCycles = */  //RTC_PERIOD_CYC256_gc = (0x07<<3),  /* 128 Hz */
-			/* sysIrqPeriodCycles = */  //RTC_PERIOD_CYC512_gc = (0x08<<3),  /* 64 Hz */
-			/* sysIrqPeriodCycles = */  //RTC_PERIOD_CYC1024_gc = (0x09<<3),  /* 32 Hz */
-			/* sysIrqPeriodCycles = */  //RTC_PERIOD_CYC2048_gc = (0x0A<<3),  /* 16 Hz */
-			/* sysIrqPeriodCycles = */  //RTC_PERIOD_CYC4096_gc = (0x0B<<3),  /* 8 Hz */
-			/* sysIrqPeriodCycles = */  //RTC_PERIOD_CYC8192_gc = (0x0C<<3),  /* 4 Hz */
-			/* sysIrqPeriodCycles = */  //RTC_PERIOD_CYC16384_gc = (0x0D<<3),  /* 2 Hz */
-			/* sysIrqPeriodCycles = */  //RTC_PERIOD_CYC32768_gc = (0x0E<<3),  /* 1 Hz */
-			sysIrqPeriodCycles = ( __builtin_clz( sysIrqFreq ) - 1 ) << 3; // (by optimized method finding the numbers of zeros of RTC IRQ freq in binary to retrieve the power of 2)
-
-			// fire change flag (executed a the next IRQ call)
-			sysIrqChangeFlag = true;
-			
-		}
-	
-	}
-	
-	uint16_t getFreqPrecision() __attribute__((always_inline)) {
-	
-		// return current value of frequency of RTC system IRQ
-		return sysIrqFreq;
-		
-	}
-	
-	static void (*isrCallback)();
+	static void (*isrRtcCallback)();
+	static void (*isrPitCallback)();
 	static void isrDefaultUnused();	
 };
 
