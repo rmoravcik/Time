@@ -85,7 +85,7 @@ To use the library, copy the download to the Library directory.
 ## MegaAvr 0 series Case
 For Arduino Uno WiFi rev 2 and other board with ATMEL AVR megaavr 0 series (3208, 3209, 4808, 4809).
 
-The internal embbeded RTC is used for real clock in board (not based on millis() function).
+The internal embbeded RTC is used for get a in board real clock (not based on millis() function).
 
 Specifics features exists for this architecture:
 
