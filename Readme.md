@@ -8,7 +8,7 @@ to provide an API that is more flexible and easier to use.
 A primary goal was to enable date and time functionality that can be used with
 a variety of external time sources with minimum differences required in sketch logic.
 
-Use Internal RTC circuit of ATMEL AVR megaavr 0 series (3208, 3209, 4808, 4809) for clocking (if detected).
+Use Internal RTC circuit of ATMEL MegaAVR 0 series (ex: Arduino Uno WiFi rev 2) for clocking (if detected).
 On this architecture, it was possible to attach/detach specifics users interruptions based on internal RTC.
 
 Example sketches illustrate how similar sketch code can be used with: a Real Time Clock,
