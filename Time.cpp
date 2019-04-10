@@ -237,10 +237,12 @@ time_t makeTime(const tmElements_t &tm){
 
 static uint32_t sysTime = 0;
 #if defined(__AVR_ATmega3208__) || defined(__AVR_ATmega3209__) || defined(__AVR_ATmega4808__) || defined(__AVR_ATmega4809__)
+bool RtcLateConditionFlag = false;
+bool setFlag = false;
 static uint16_t rtcPulses = 0;
-#else
-static uint32_t prevMillis = 0;
 #endif
+static uint32_t prevMillis = 0;
+
 static uint32_t nextSyncTime = 0;
 static timeStatus_t Status = timeNotSet;
 
@@ -249,38 +251,60 @@ static timeStatus_t Status = timeNotSet;
 
 RealTimeCounter InternalRTC; // preinstatiate
 
-void (*RealTimeCounter::isrCallback)() = RealTimeCounter::isrDefaultUnused;
+void (*RealTimeCounter::isrRtcCallback)() = RealTimeCounter::isrDefaultUnused;
+void (*RealTimeCounter::isrPitCallback)() = RealTimeCounter::isrDefaultUnused;
 
-// system RTC interrupt function called at InternalRTC.sysIrqFreq Hz
+// RTC IRQ played each second
+ISR(RTC_CNT_vect) {
+	
+  // Clear flag by writing '1':
+  RTC.INTFLAGS = RTC_OVF_bm;
+    
+  // do not increment the time and fire the user IRQ if it was done right before in setTime
+  // (protection for the case if ISR called because RTC.CNT was overflow during setTime)
+  if(RtcLateConditionFlag && millis() - prevMillis < RTC_CNT_OVERFLOW_WHILE_SET_TIME_CALLED_MAX_MS ) {
+				
+  	prevMillis=millis();	
+		
+  } else { // normal condition, add and fire new second
+		
+	prevMillis=millis();
+		
+	// increment system time
+	sysTime++;
+	
+	#ifdef TIME_DRIFT_INFO
+      sysUnsyncedTime++; // this can be compared to the synced time to measure long term drift     
+	#endif
+		
+	// call interrupt user function if defined
+	InternalRTC.isrRtcCallback();
+    	
+  }
+	
+  // reset RTC late condition at this time
+  RtcLateConditionFlag = false;
+
+  // update the PIT IRQ registers if required
+  if( InternalRTC.RtcPitChangeFlag ) {
+
+	RTC.PITCTRLA = InternalRTC.RtcPitPeriodCycles // set the RTC PIT frequency
+		| RTC_PITEN_bm; // Enable: enabled
+
+	InternalRTC.RtcPitChangeFlag = false; // release change flag
+  
+  }
+
+}
+
+// system RTC interrupt function called at InternalRTC.RtcPitFreq Hz
 ISR(RTC_PIT_vect) {
 
 	// clear flag by writing '1'
 	RTC.PITINTFLAGS = RTC_PI_bm;
 
-	// update the RTC IRQ registers if required
-	if( InternalRTC.sysIrqChangeFlag ) {
-	
-	RTC.PITCTRLA = InternalRTC.sysIrqPeriodCycles // set the system IRQ frequency
-		| RTC_PITEN_bm; // Enable: enabled
-
-		InternalRTC.sysIrqChangeFlag = false; // release change flag
-      
-	}
-
-	// fire user IRQ only at the good frequency
-	if( InternalRTC.userIrqFreq != 0 && rtcPulses % (InternalRTC.sysIrqFreq / InternalRTC.userIrqFreq) == 0 ) {
-
-		InternalRTC.isrCallback(); // call interrupt user function if defined
-
-	}
-
-	// incrementing system time when the current second is elapsed
-	if( ++rtcPulses == InternalRTC.sysIrqFreq ) {
-
-		rtcPulses = 0;
-		sysTime++;		
-
-	}   	
+	//InternalRTC.RtcPitFreq;
+	InternalRTC.isrPitCallback(); // call interrupt user function if defined
 		
 }
 #endif
@@ -321,20 +345,56 @@ time_t now() {
 }
 
 void setTime(time_t t) {
+
+#if defined(__AVR_ATmega3208__) || defined(__AVR_ATmega3209__) || defined(__AVR_ATmega4808__) || defined(__AVR_ATmega4809__)
+  
+  // reset the hardware RTC counter 
+  RTC.CNT = 0;
+    
+#endif
+
 #ifdef TIME_DRIFT_INFO
- if(sysUnsyncedTime == 0) 
+
+ if(sysUnsyncedTime == 0)
    sysUnsyncedTime = t;   // store the time of the first call to set a valid Time   
+   
 #endif
 
   sysTime = (uint32_t)t;  
+
   nextSyncTime = (uint32_t)t + syncInterval;
   Status = timeSet;
 
-#if defined(__AVR_ATmega3208__) || defined(__AVR_ATmega3209__) || defined(__AVR_ATmega4808__) || defined(__AVR_ATmega4809__)
-  rtcPulses = 0; //  restart counting
-#else
+#if !defined(__AVR_ATmega3208__) && !defined(__AVR_ATmega3209__) && !defined(__AVR_ATmega4808__) && !defined(__AVR_ATmega4809__)
+
   prevMillis = millis();  // restart counting from now (thanks to Korman for this fix)
+
+#else
+
+  // manualy fire the new second when RTC is too late
+  if( millis() - prevMillis > RTC_LATE_OR_ADVANCE_LIMIT_MS ) {
+	  
+	// reset millis in order to later know  if we are late or in advance
+	prevMillis = millis();
+	  
+	// set RTC late condition that true
+	RtcLateConditionFlag = true;
+	  
+	// call interrupt user function if defined
+	InternalRTC.isrRtcCallback();
+	  	  
+  } else { // if the RTC is in advance
+	  
+	// reset millis in order to later know  if we are late or in advance
+	prevMillis = millis();
+	  
+	// reset RTC late condition at this time
+	RtcLateConditionFlag = false;
+	  
+  }
+  
 #endif
+
 } 
 
 void setTime(int hr,int min,int sec,int dy, int mnth, int yr){
@@ -364,13 +424,13 @@ timeStatus_t timeStatus() {
   return Status;
 }
 
-void setSyncProvider( getExternalTime getTimeFunction){
+void setSyncProvider( getExternalTime getTimeFunction) {
   getTimePtr = getTimeFunction;  
   nextSyncTime = sysTime;
   now(); // this will sync the clock
 }
 
-void setSyncInterval(time_t interval){ // set the number of seconds between re-sync
+void setSyncInterval(time_t interval) { // set the number of seconds between re-sync
   syncInterval = (uint32_t)interval;
   nextSyncTime = sysTime + syncInterval;
 }
@@ -378,59 +438,67 @@ void setSyncInterval(time_t interval){ // set the number of seconds between re-s
 
 #if defined(__AVR_ATmega3208__) || defined(__AVR_ATmega3209__) || defined(__AVR_ATmega4808__) || defined(__AVR_ATmega4809__)
 
-/*  TimeHelper constructor for activate 1s interrupt with RTC registers */
-RealTimeCounter::RealTimeCounter() { 
+  //  TimeHelper constructor for activate 1s interrupt with RTC registers
+  RealTimeCounter::RealTimeCounter() { 
 
-	uint8_t temp;
-	
-    /* Initialize 32.768kHz Oscillator: */
-    /* Disable oscillator: */
+    uint8_t temp;
+
+    // Initialize 32.768kHz Oscillator:
+    // Disable oscillator:
     temp = CLKCTRL.XOSC32KCTRLA;
     temp &= ~CLKCTRL_ENABLE_bm;
     
-    /* Enable writing to protected register */
+    // Enable writing to protected register
     CPU_CCP = CCP_IOREG_gc;
     CLKCTRL.XOSC32KCTRLA = temp;
     
-    while(CLKCTRL.MCLKSTATUS & CLKCTRL_XOSC32KS_bm)
-    {
-        ; /* Wait until XOSC32KS becomes 0 */
+    while(CLKCTRL.MCLKSTATUS & CLKCTRL_XOSC32KS_bm) {
+        ; // Wait until XOSC32KS becomes 0
     }
     
-    /* SEL = 0 (Use External Crystal): */
+    // SEL = 0 (Use External Crystal):
     temp = CLKCTRL.XOSC32KCTRLA;
     temp &= ~CLKCTRL_SEL_bm;
     
-    /* Enable writing to protected register */
+    // Enable writing to protected register
     CPU_CCP = CCP_IOREG_gc;
     CLKCTRL.XOSC32KCTRLA = temp;
     
-    /* Enable oscillator: */
+    // Enable oscillator:
     temp = CLKCTRL.XOSC32KCTRLA;
     temp |= CLKCTRL_ENABLE_bm;
     
-    /* Enable writing to protected register */
+    // Enable writing to protected register
     CPU_CCP = CCP_IOREG_gc;
     CLKCTRL.XOSC32KCTRLA = temp;
     
-    /* Initialize RTC: */
-    while (RTC.STATUS > 0)
-    {
-        ; /* Wait for all register to be synchronized */
+    // Initialize RTC:
+    while (RTC.STATUS > 0) {
+        ; // Wait for all register to be synchronized
     }
-
-    /* 32.768kHz External Crystal Oscillator (XOSC32K) */
-    RTC.CLKSEL = RTC_CLKSEL_TOSC32K_gc;
-
-    /* Run in debug: enabled */
-    //RTC.DBGCTRL = RTC_DBGRUN_bm;
-
-    RTC.PITINTCTRL = RTC_PI_bm; /* Periodic Interrupt: enabled */
     
-	RTC.PITCTRLA = RTC_PERIOD_CYC4096_gc| RTC_PITEN_bm; /* set 1 Hz rtc irq at startup */
+    // Set period
+    RTC.PER = RTC_CYCLES_PERIOD;
+    
+    // 32.768kHz External Crystal Oscillator (XOSC32K)
+    RTC.CLKSEL = RTC_CLKSEL_TOSC32K_gc;
+ 
+ 	// Periodic Interrupt: enabled
+    RTC.PITINTCTRL = RTC_PI_bm;
+    
+    // set pit period off at startup
+    RTC.PITCTRLA = RtcPitPeriodCycles| RTC_PITEN_bm;
+    
+    // set prescaler to the max precision (diviser by 1)
+    RTC.CTRLA = RTC_PRESCALER_DIV1_gc  
+    | RTC_RTCEN_bm            // Enable: enabled
+    | RTC_RUNSTDBY_bm;        // Run In Standby: enabled
+   
+    // Enable Overflow Interrupt
+    RTC.INTCTRL |= RTC_OVF_bm;
 
+  }
 
-}
-
-void RealTimeCounter::isrDefaultUnused() {}
+  void RealTimeCounter::isrDefaultUnused() {}
+  
 #endif
