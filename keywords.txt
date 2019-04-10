@@ -26,7 +26,8 @@ setSyncProvider	KEYWORD2
 setSyncInterval	KEYWORD2
 attachInterrupt	KEYWORD2
 detachInterrupt	KEYWORD2
-setFreqPrecision KEYWORD2
+attachClockInterrupt	KEYWORD2
+detachClockInterrupt	KEYWORD2
 isrCallback	KEYWORD2
 timeStatus	KEYWORD2
 TimeLib	KEYWORD2
