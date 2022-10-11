@@ -398,6 +398,7 @@ void setTime(time_t t) {
 } 
 
 void setTime(int hr,int min,int sec,int dy, int mnth, int yr){
+  tmElements_t tm;
  // year can be given as full four digit year or two digts (2010 or 10 for 2010);  
  //it is converted to years since 1970
   if( yr > 99)
