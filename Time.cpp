@@ -441,6 +441,7 @@ void setSyncInterval(time_t interval) { // set the number of seconds between re-
   //  TimeHelper constructor for activate 1s interrupt with RTC registers
   RealTimeCounter::RealTimeCounter() { 
 
+#ifdef USE_EXERNAL_XTAL
     uint8_t temp;
 
     // Initialize 32.768kHz Oscillator:
@@ -471,6 +472,7 @@ void setSyncInterval(time_t interval) { // set the number of seconds between re-
     // Enable writing to protected register
     CPU_CCP = CCP_IOREG_gc;
     CLKCTRL.XOSC32KCTRLA = temp;
+#endif
     
     // Initialize RTC:
     while (RTC.STATUS > 0) {
@@ -480,8 +482,13 @@ void setSyncInterval(time_t interval) { // set the number of seconds between re-
     // Set period
     RTC.PER = RTC_CYCLES_PERIOD;
     
+#ifdef USE_EXERNAL_XTAL
     // 32.768kHz External Crystal Oscillator (XOSC32K)
     RTC.CLKSEL = RTC_CLKSEL_TOSC32K_gc;
+#else
+    // Internal 32.768 kHz from OSCULP32K
+    RTC.CLKSEL = RTC_CLKSEL_INT32K_gc;
+#endif
  
  	// Periodic Interrupt: enabled
     RTC.PITINTCTRL = RTC_PI_bm;
